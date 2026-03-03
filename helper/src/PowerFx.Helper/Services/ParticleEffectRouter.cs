@@ -42,9 +42,10 @@ public sealed class ParticleEffectRouter
                 if (caretScreenPoint.HasValue)
                 {
                     // Overlay 铺满虚拟桌面，屏幕逻辑坐标 == Overlay 本地坐标，直接用
+                    // 需要减去 Overlay 的 Left/Top 获取 Canvas 本地坐标
                     emitPoint = new Point(
-                        caretScreenPoint.Value.X + (Random.Shared.NextDouble() - 0.5) * 16,
-                        caretScreenPoint.Value.Y + (Random.Shared.NextDouble() - 0.5) * 8);
+                        caretScreenPoint.Value.X - _overlay.Left + (Random.Shared.NextDouble() - 0.5) * 16,
+                        caretScreenPoint.Value.Y - _overlay.Top + (Random.Shared.NextDouble() - 0.5) * 8);
                 }
                 else
                 {
@@ -66,8 +67,22 @@ public sealed class ParticleEffectRouter
         {
             try
             {
-                // 直接使用屏幕逻辑坐标（Overlay 铺满虚拟桌面）
-                var overlayPt = new Point(screenPoint.X, screenPoint.Y);
+                // WinPoint 也是屏幕物理坐标，将其转换为 WPF 逻辑坐标。
+                // 偏右下角是因为物理像素直接当逻辑像素用，导致超出实际逻辑大小（相当于放大）。
+                var src = PresentationSource.FromVisual(Application.Current.MainWindow);
+                double dpiX = 1.0, dpiY = 1.0;
+                if (src?.CompositionTarget != null)
+                {
+                    dpiX = src.CompositionTarget.TransformFromDevice.M11;
+                    dpiY = src.CompositionTarget.TransformFromDevice.M22;
+                }
+
+                // 计算逻辑坐标
+                double logicalX = screenPoint.X * dpiX;
+                double logicalY = screenPoint.Y * dpiY;
+
+                // 直接使用逻辑坐标减去 Overlay 偏移
+                var overlayPt = new Point(logicalX - _overlay.Left, logicalY - _overlay.Top);
                 _overlay.Emitter.Emit(overlayPt, ParticlePresets.Selection);
             }
             catch (Exception ex)

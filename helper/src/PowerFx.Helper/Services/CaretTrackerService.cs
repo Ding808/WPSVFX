@@ -96,6 +96,11 @@ public sealed class CaretTrackerService
     /// </summary>
     private Point? TryGetCaretViaUia(IntPtr hwnd)
     {
+        // 发现部分版本的 Windows Terminal 的 UIA 在未选取任何文字时会返回固定值（如窗口左上角 50,111 等），
+        // 导致特效卡在左上角不动。这里直接禁用 UIA 策略，全面回退到精算后的 ConPTY 策略，
+        // ConPTY 现在会根据 WT 物理尺寸反推实际字符宽高，精确度极高。
+        return null;
+        /*
         try
         {
             // 缓存：只有当窗口句柄改变时才重新搜索文本元素
@@ -132,7 +137,9 @@ public sealed class CaretTrackerService
             var rects = selection[0].GetBoundingRectangles();
             if (rects.Length == 0) return null;
 
-            // rects 是屏幕物理坐标（System.Windows.Rect，WPF 逻辑像素）
+            // UIAutomation 的 GetBoundingRectangles 通常在 Windows Forms 和 WPF 对接口之间经过缩放修正
+            // 测试证明直接使用 rect 返回的值作为逻辑单位就已足够。如果乘 M11 则会偏左上（缩水了），
+            // 直接返回原坐标：
             return new Point(rects[0].Left, rects[0].Top);
         }
         catch
@@ -142,6 +149,7 @@ public sealed class CaretTrackerService
             _cachedTextElementHwnd = IntPtr.Zero;
             return null;
         }
+        */
     }
 }
 

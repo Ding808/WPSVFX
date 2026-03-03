@@ -34,6 +34,12 @@ public sealed class ConsoleCursorService : IDisposable
         "python", "python3", "node"
     };
 
+    // Console 宿主进程：直接持有 ConPTY 缓冲，当找不到 shell 时作为回退目标
+    private static readonly HashSet<string> ConsoleHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "OpenConsole", "conhost"
+    };
+
     // AttachConsole 全局互斥（同一进程同时只能 attach 一个 console）
     private static readonly object _consoleLock = new();
 
@@ -68,49 +74,61 @@ public sealed class ConsoleCursorService : IDisposable
         Win32.GetWindowThreadProcessId(wtHwnd, out uint wtPid);
         if (wtPid == 0) return null;
 
-        // 2. 找 shell 子进程（深度 1-2）
+        // 2. 找 shell / console-host 子进程
         uint shellPid = FindShellChildPid(wtPid);
-        if (shellPid == 0)
-        {
-            Logger.Warn("ConsoleCursor", $"WT PID={wtPid} 未找到已知 shell 子进程，降级为 null");
-            return null;
-        }
-        Logger.Debug("ConsoleCursor", $"找到 shell 子进程 PID={shellPid}");
+        if (shellPid == 0) return null;
 
         // 3. 通过 Console API 获取光标行列 + 字符单元格大小 + 视口总行数
         if (!TryGetConsoleCursorInfo(shellPid,
                 out short col, out short visibleRow,
                 out short cellW, out short cellH,
-                out short viewportRows))
+                out short viewportRows, out short viewportCols))
             return null;
 
         // 4. WT 窗口客户区矩形 + 客户区原点（屏幕坐标）
-        if (!Win32.GetClientRect(wtHwnd, out _)) return null;
+        if (!Win32.GetClientRect(wtHwnd, out var clientRect)) return null;
         var clientOrigin = new Win32.POINT { X = 0, Y = 0 };
         if (!Win32.ClientToScreen(wtHwnd, ref clientOrigin)) return null;
 
+        int clientH = clientRect.Bottom - clientRect.Top;
+        int clientW = clientRect.Right - clientRect.Left;
+
+        double realCellH = cellH;
+        double realCellW = cellW;
+        if (viewportRows > 0 && viewportCols > 0)
+        {
+            // Windows Terminal 常常将 ConPTY 字号报为 8x16（不受设置影响）
+            // 我们通过物理窗口尺寸反推真实的字符物理像素宽高
+            double estimatedCellH = (clientH - tabBarPx) / (double)viewportRows;
+            double estimatedCellW = (clientW - paddingPx * 2) / (double)viewportCols;
+            
+            // 如果推算值比 8x16 合理，则采用推算值
+            if (estimatedCellH > 0) realCellH = estimatedCellH;
+            if (estimatedCellW > 0) realCellW = estimatedCellW;
+        }
+
         // 5. 换算（全部物理像素）
-        // ConPTY 视口从内容顶部往下渲染，visRow=0 = 第一行
-        int screenX = clientOrigin.X + paddingPx + col      * cellW;
-        int screenY = clientOrigin.Y + tabBarPx  + visibleRow * cellH;
+        // col * cellW 是光标列左边缘；+ cellW/2 取列中心
+        // visibleRow * cellH 是行顶部；+ cellH 取行底部（光标线/块实际位于行底）
+        int screenX = (int)(clientOrigin.X + paddingPx + col * realCellW + realCellW / 2);
+        int screenY = (int)(clientOrigin.Y + tabBarPx  + visibleRow * realCellH + realCellH);
 
         Logger.Debug("ConsoleCursor",
-            $"dpiScale={dpiScale:F2} col={col} visRow={visibleRow}/{viewportRows} cell={cellW}x{cellH} tabBarPx={tabBarPx} clientOrigin=({clientOrigin.X},{clientOrigin.Y}) \u2192 screen=({screenX},{screenY})");
+            $"dpiScale={dpiScale:F2} col={col}/{viewportCols} visRow={visibleRow}/{viewportRows} cell={realCellW:F1}x{realCellH:F1} tabBarPx={tabBarPx} clientOrigin=({clientOrigin.X},{clientOrigin.Y}) \u2192 screen=({screenX},{screenY})");
         return new Point(screenX, screenY);
     }
 
     // ── 进程树搜索 ────────────────────────────────────────────────────────────
 
-    private static uint FindShellChildPid(uint parentPid)
+    private static uint FindShellChildPid(uint wtPid)
     {
         IntPtr snap = Win32.CreateToolhelp32Snapshot(Win32.TH32CS_SNAPPROCESS, 0);
         if (snap == Win32.INVALID_HANDLE_VALUE) return 0;
 
         try
         {
-            // 建立 parentPid → [childPid] 映射，只关心深度 2 以内
-            var directChildren  = new List<uint>();
-            var depth2Children  = new List<uint>();
+            // 一次性构建 parentPid → [(childPid, name)] 映射
+            var childMap = new Dictionary<uint, List<(uint pid, string name)>>();
 
             var entry = new Win32.PROCESSENTRY32
             {
@@ -121,44 +139,75 @@ public sealed class ConsoleCursorService : IDisposable
 
             do
             {
-                if (entry.th32ParentProcessID == parentPid)
-                    directChildren.Add(entry.th32ProcessID);
+                var exeName = System.IO.Path.GetFileNameWithoutExtension(entry.szExeFile);
+                uint ppid   = entry.th32ParentProcessID;
+                if (!childMap.TryGetValue(ppid, out var list))
+                    childMap[ppid] = list = new List<(uint, string)>();
+                list.Add((entry.th32ProcessID, exeName));
             } while (Win32.Process32Next(snap, ref entry));
 
-            // 第二次遍历找孙子进程
-            entry.dwSize = (uint)Marshal.SizeOf<Win32.PROCESSENTRY32>();
-            if (Win32.Process32First(snap, ref entry))
+            // BFS 遍历进程树，最大深度 4（WT → OpenConsole → shell → 子 shell）
+            // 优先返回浅层已知 shell；若全程找不到 shell，则回退到 OpenConsole/conhost
+            var queue              = new Queue<(uint pid, string name, int depth)>();
+            var visited            = new HashSet<uint> { wtPid };
+            var shellCandidates    = new List<(uint pid, int depth)>();
+            var consoleHostFallback = new List<(uint pid, int depth)>();
+
+            if (childMap.TryGetValue(wtPid, out var wtChildren))
             {
-                do
+                foreach (var (pid, name) in wtChildren)
                 {
-                    if (directChildren.Contains(entry.th32ParentProcessID))
-                        depth2Children.Add(entry.th32ProcessID);
-                } while (Win32.Process32Next(snap, ref entry));
+                    if (visited.Add(pid))
+                        queue.Enqueue((pid, name, 1));
+                }
             }
 
-            // 在所有子/孙进程中找第一个已知 shell
-            var allCandidates = new List<(uint pid, int priority)>();
-
-            entry.dwSize = (uint)Marshal.SizeOf<Win32.PROCESSENTRY32>();
-            if (Win32.Process32First(snap, ref entry))
+            while (queue.Count > 0)
             {
-                do
-                {
-                    var name = System.IO.Path.GetFileNameWithoutExtension(entry.szExeFile);
-                    if (!KnownShells.Contains(name)) continue;
+                var (pid, name, depth) = queue.Dequeue();
 
-                    if (directChildren.Contains(entry.th32ProcessID))
-                        allCandidates.Add((entry.th32ProcessID, 0));   // 直接子进程优先
-                    else if (depth2Children.Contains(entry.th32ProcessID))
-                        allCandidates.Add((entry.th32ProcessID, 1));
-                } while (Win32.Process32Next(snap, ref entry));
+                if (KnownShells.Contains(name))
+                {
+                    shellCandidates.Add((pid, depth));
+                }
+                else if (ConsoleHosts.Contains(name))
+                {
+                    // console 宿主直接持有缓冲，记录备用
+                    consoleHostFallback.Add((pid, depth));
+                }
+
+                // 继续向下展开（深度上限 4）
+                if (depth < 4 && childMap.TryGetValue(pid, out var grandChildren))
+                {
+                    foreach (var (childPid, childName) in grandChildren)
+                    {
+                        if (visited.Add(childPid))
+                            queue.Enqueue((childPid, childName, depth + 1));
+                    }
+                }
             }
 
-            if (allCandidates.Count == 0) return 0;
+            // 优先选深度最浅的已知 shell
+            if (shellCandidates.Count > 0)
+            {
+                shellCandidates.Sort((a, b) => a.depth.CompareTo(b.depth));
+                Logger.Debug("ConsoleCursor",
+                    $"找到 shell PID={shellCandidates[0].pid} depth={shellCandidates[0].depth}");
+                return shellCandidates[0].pid;
+            }
 
-            // 取优先级最高（priority 最小）的
-            allCandidates.Sort((a, b) => a.priority.CompareTo(b.priority));
-            return allCandidates[0].pid;
+            // 回退：OpenConsole / conhost 直接持有 ConPTY 缓冲，AttachConsole 仍可用
+            if (consoleHostFallback.Count > 0)
+            {
+                consoleHostFallback.Sort((a, b) => a.depth.CompareTo(b.depth));
+                uint fallbackPid = consoleHostFallback[0].pid;
+                Logger.Debug("ConsoleCursor",
+                    $"未找到 shell，回退到 console host PID={fallbackPid}");
+                return fallbackPid;
+            }
+
+            Logger.Warn("ConsoleCursor", $"WT PID={wtPid} 进程树中未找到可用目标");
+            return 0;
         }
         catch (Exception ex)
         {
@@ -177,9 +226,9 @@ public sealed class ConsoleCursorService : IDisposable
         uint shellPid,
         out short col, out short visibleRow,
         out short cellW, out short cellH,
-        out short viewportRows)
+        out short viewportRows, out short viewportCols)
     {
-        col = visibleRow = cellW = cellH = viewportRows = 0;
+        col = visibleRow = cellW = cellH = viewportRows = viewportCols = 0;
 
         lock (_consoleLock)
         {
@@ -207,7 +256,9 @@ public sealed class ConsoleCursorService : IDisposable
                 visibleRow   = (short)(bufInfo.dwCursorPosition.Y - bufInfo.srWindow.Top);
                 if (visibleRow < 0) visibleRow = 0;
                 viewportRows = (short)(bufInfo.srWindow.Bottom - bufInfo.srWindow.Top + 1);
+                viewportCols = (short)(bufInfo.srWindow.Right - bufInfo.srWindow.Left + 1);
                 if (viewportRows <= 0) viewportRows = 24;  // 保守兜底
+                if (viewportCols <= 0) viewportCols = 80;
 
                 // 字符单元格像素大小
                 var fontInfo = new Win32.CONSOLE_FONT_INFOEX
