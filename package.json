@@ -1,0 +1,19 @@
+{
+  "name": "wt-powerfx-root",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Monorepo root for wt-powerfx",
+  "workspaces": [
+    "cli"
+  ],
+  "scripts": {
+    "build:cli": "npm run build --workspace=cli",
+    "build:helper": "powershell -ExecutionPolicy Bypass -File scripts/build-helper.ps1",
+    "build:all": "npm run build:helper && npm run build:cli",
+    "publish:helper": "powershell -ExecutionPolicy Bypass -File scripts/publish-helper.ps1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
