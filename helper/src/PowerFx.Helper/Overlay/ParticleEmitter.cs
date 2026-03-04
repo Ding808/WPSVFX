@@ -25,6 +25,12 @@ public sealed class ParticleEmitter
     /// </summary>
     public void Emit(Point origin, ParticlePreset preset)
     {
+        if (preset.Name == "Enter")
+        {
+            EmitLightning(origin, preset);
+            return;
+        }
+
         for (int i = 0; i < preset.Count; i++)
         {
             var p = RentOrCreate();
@@ -33,22 +39,103 @@ public sealed class ParticleEmitter
             double speed = preset.MinSpeed + Rng.NextDouble() * (preset.MaxSpeed - preset.MinSpeed);
 
             double vx = Math.Cos(angle) * speed;
-            double vy = Math.Sin(angle) * speed * (preset.Upward ? -1.5 : 1.0);
+            double vy = Math.Sin(angle) * speed * (preset.Upward && !preset.Implode ? -1.5 : 1.0);
+            
+            double pX = origin.X;
+            double pY = origin.Y;
+
+            double lifetime = preset.MinLifetime + Rng.NextDouble() * (preset.MaxLifetime - preset.MinLifetime);
+
+            if (preset.Implode)
+            {
+                // 如果是收缩，则初始位置偏移，并让速度指向中心
+                pX += vx * lifetime * 0.8;
+                pY += vy * lifetime * 0.8;
+                vx = -vx;
+                vy = -vy;
+            }
 
             var color = InterpolateColor(preset.Palette, (double)i / preset.Count);
 
             p.Reset(
-                x:        origin.X,
-                y:        origin.Y,
+                x:        pX,
+                y:        pY,
                 vx:       vx,
                 vy:       vy,
                 color:    color,
                 size:     preset.MinSize + Rng.NextDouble() * (preset.MaxSize - preset.MinSize),
-                lifetime: preset.MinLifetime + Rng.NextDouble() * (preset.MaxLifetime - preset.MinLifetime),
-                gravity:  preset.Gravity);
+                lifetime: lifetime,
+                gravity:  preset.Gravity,
+                shrink:   preset.Shrink);
 
             _pending.Enqueue(p);
         }
+    }
+
+    public void EmitLightning(Point origin, ParticlePreset preset)
+    {
+        // 闪电：从光标向上方（或横向）生成折线，使用 Particle 的 TargetX/TargetY 保存线段
+        int branches = 2 + Rng.Next(3);
+        for (int b = 0; b < branches; b++)
+        {
+            double curX = origin.X;
+            double curY = origin.Y;
+            int segments = 5 + Rng.Next(5);
+            var color = preset.Palette[Rng.Next(preset.Palette.Length)];
+            
+            for (int i = 0; i < segments; i++)
+            {
+                double nextX = curX + (Rng.NextDouble() - 0.5) * 60;
+                double nextY = curY - (10 + Rng.NextDouble() * 30); // 向上蔓延
+
+                var p = RentOrCreate();
+                p.TargetReset(
+                    ParticleType.Lightning,
+                    curX, curY, nextX, nextY,
+                    color,
+                    size: preset.MinSize + Rng.NextDouble() * 2,
+                    lifetime: preset.MinLifetime + Rng.NextDouble() * 0.1);
+                
+                _pending.Enqueue(p);
+
+                curX = nextX;
+                curY = nextY;
+            }
+        }
+    }
+
+    public void EmitSlash(Point start, Point end)
+    {
+        // 水果忍者刀光特效：在两点之间生成一条带有拖尾感觉的线
+        var p = RentOrCreate();
+        p.TargetReset(
+            ParticleType.Slash,
+            start.X, start.Y, end.X, end.Y,
+            Colors.White, // 核心白色
+            size: 4.0,
+            lifetime: 0.3); // 闪现 0.3s
+        _pending.Enqueue(p);
+
+        // 蓝青色余晖
+        var p2 = RentOrCreate();
+        p2.TargetReset(
+            ParticleType.Slash,
+            start.X, start.Y, end.X, end.Y,
+            Color.FromArgb(180, 50, 200, 255),
+            size: 8.0,
+            lifetime: 0.4);
+        _pending.Enqueue(p2);
+    }
+
+    /// <summary>
+    /// 在当前字符位置发射一个静态发光方块。
+    /// </summary>
+    public void EmitStaticBlock(Point center, double width, double height, Color color, double lifetime)
+    {
+        var p = RentOrCreate();
+        // 居中绘制，算出左上角 X Y (假设 OverlayRenderer 里直接以 X Y 为中心或者左上角，后续 Renderer 注意处理)
+        p.StaticBlockReset(center.X, center.Y, color, width, height, lifetime);
+        _pending.Enqueue(p);
     }
 
     /// <summary>

@@ -25,14 +25,18 @@ public sealed class ParticleEffectRouter
     /// </summary>
     public void Route(KeyEffectEvent evt, Point? caretScreenPoint = null)
     {
-        var preset = evt.EventType switch
+        ParticlePreset? preset = evt.EventType switch
         {
             KeyEventType.Backspace => ParticlePresets.Backspace,
             KeyEventType.Delete    => ParticlePresets.Delete,
             KeyEventType.Enter     => ParticlePresets.Enter,
+            KeyEventType.Tab       => ParticlePresets.Enter, // 同为蓝色闪电
             KeyEventType.CtrlA     => ParticlePresets.Selection,
+            KeyEventType.Arrow     => null, // 方向键由 Bootstrapper 单独处理位移刀光，不放常规粒子
             _                      => ParticlePresets.Normal
         };
+
+        if (preset == null) return;
 
         Application.Current?.Dispatcher.Invoke(() =>
         {
@@ -44,8 +48,14 @@ public sealed class ParticleEffectRouter
                     // Overlay 铺满虚拟桌面，屏幕逻辑坐标 == Overlay 本地坐标，直接用
                     // 需要减去 Overlay 的 Left/Top 获取 Canvas 本地坐标
                     emitPoint = new Point(
-                        caretScreenPoint.Value.X - _overlay.Left + (Random.Shared.NextDouble() - 0.5) * 16,
-                        caretScreenPoint.Value.Y - _overlay.Top + (Random.Shared.NextDouble() - 0.5) * 8);
+                        caretScreenPoint.Value.X - _overlay.Left,
+                        caretScreenPoint.Value.Y - _overlay.Top);
+                        
+                    if (preset.Name != "Enter")
+                    {
+                        emitPoint.X += (Random.Shared.NextDouble() - 0.5) * 16;
+                        emitPoint.Y += (Random.Shared.NextDouble() - 0.5) * 8;
+                    }
                 }
                 else
                 {
@@ -53,10 +63,57 @@ public sealed class ParticleEffectRouter
                 }
 
                 _overlay.Emitter.Emit(emitPoint, preset);
+
+                // 发射光标方块
+                if (caretScreenPoint.HasValue)
+                {
+                    // 向上微调Y轴12个像素以绝对居中对齐文字本身（进一步大幅修正下沉，使外框完美对齐字母）
+                    var blockPoint = new Point(
+                        caretScreenPoint.Value.X - _overlay.Left - 4,
+                        caretScreenPoint.Value.Y - _overlay.Top - 12);
+                        
+                    // 定义大致的被占用的字符大小。
+                    // 为了让方块完全包裹住光标，我们用稍宽稍微高一点的矩形
+                    double charWidth = 14.0;
+                    double charHeight = 26.0;
+                    // 输入普通则偏蓝青色，删除则偏红
+                    System.Windows.Media.Color blockColor;
+                    if (evt.EventType == KeyEventType.Backspace || evt.EventType == KeyEventType.Delete)
+                    {
+                        blockColor = System.Windows.Media.Color.FromArgb(160, 255, 40, 40);
+                        
+                        // 退格删除时，实际上我们希望发光和粒子可以向刚才真正按下的前方对齐（稍微向左偏移一定距离，因为光标实际上已经缩回来了）
+                        blockPoint.X -= 8.0; 
+                        emitPoint.X -= 8.0;
+                    }
+                    else
+                    {
+                        blockColor = System.Windows.Media.Color.FromArgb(160, 50, 220, 255);
+                    }
+
+                    _overlay.Emitter.EmitStaticBlock(blockPoint, charWidth, charHeight, blockColor, 0.4);
+                }
             }
             catch (Exception ex)
             {
                 Logger.Warn("ParticleEffectRouter", $"发射粒子失败: {ex.Message}");
+            }
+        });
+    }
+
+    public void EmitSlash(Point oldCaret, Point newCaret)
+    {
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            try
+            {
+                var start = new Point(oldCaret.X - _overlay.Left, oldCaret.Y - _overlay.Top);
+                var end = new Point(newCaret.X - _overlay.Left, newCaret.Y - _overlay.Top);
+                _overlay.Emitter.EmitSlash(start, end);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn("ParticleEffectRouter", $"发射刀光失败: {ex.Message}");
             }
         });
     }

@@ -56,6 +56,11 @@ public sealed class KeyboardHookService : IDisposable
             Win32.VK_BACK   => KeyEventType.Backspace,
             Win32.VK_DELETE => KeyEventType.Delete,
             Win32.VK_RETURN => KeyEventType.Enter,
+            0x09            => KeyEventType.Tab,   // VK_TAB
+            0x25            => KeyEventType.Arrow, // 左
+            0x26            => KeyEventType.Arrow, // 上
+            0x27            => KeyEventType.Arrow, // 右
+            0x28            => KeyEventType.Arrow, // 下
             _               => IsCtrlA(vk) ? KeyEventType.CtrlA : KeyEventType.Normal
         };
 

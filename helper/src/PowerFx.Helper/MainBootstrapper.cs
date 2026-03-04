@@ -29,6 +29,7 @@ public sealed class MainBootstrapper : IDisposable
 
     private OverlayWindow? _overlayWindow;
     private bool _disposed;
+    private WpfPoint? _lastCaretPos;
 
     // ── 启动 ─────────────────────────────────────────────────
 
@@ -104,7 +105,22 @@ public sealed class MainBootstrapper : IDisposable
         WpfPoint? caretPos = _caretTracker!.GetCaretScreenPoint();
         Logger.Debug("Bootstrapper", $"CaretPos = {(caretPos.HasValue ? $"{caretPos.Value.X:F0},{caretPos.Value.Y:F0}" : "null")}");
 
-        // 触发粒子（带光标位置）
+        // 记录光标跳跃进行刀光特效
+        if (_lastCaretPos.HasValue && caretPos.HasValue && evt.EventType != KeyEventType.Enter && evt.EventType != KeyEventType.Tab)
+        {
+            double distSq = Math.Pow(caretPos.Value.X - _lastCaretPos.Value.X, 2) + Math.Pow(caretPos.Value.Y - _lastCaretPos.Value.Y, 2);
+            // 距离平方大于 2500，约即位移超过 50 像素（排除单纯的上下行移动），或者是直接鼠标点击等导致的巨大跳跃，展现水果忍者刀光
+            if (evt.EventType != KeyEventType.Arrow && distSq > 2500) 
+            {
+                _particleRouter!.EmitSlash(_lastCaretPos.Value, caretPos.Value);
+            }
+        }
+        if (caretPos.HasValue)
+        {
+            _lastCaretPos = caretPos;
+        }
+
+        // 触发正常粒子（带光标位置）
         _particleRouter!.Route(evt, caretPos);
 
         // 连续抖动：按键类型决定幅度，停键后 150ms 自动恢复原位
@@ -113,10 +129,15 @@ public sealed class MainBootstrapper : IDisposable
         {
             KeyEventType.Backspace => _shake!.DeleteAmplitude,
             KeyEventType.Delete    => _shake!.DeleteAmplitude,
-            KeyEventType.Enter     => _shake!.EnterAmplitude,
+            KeyEventType.Enter     => _shake!.EnterAmplitude * 2, // 剧烈抖动
+            KeyEventType.Tab       => _shake!.EnterAmplitude * 2, // 剧烈抖动
+            KeyEventType.Arrow     => 0, // 方向键不抖动
             _                      => _shake!.NormalAmplitude
         };
-        _shake!.OnKeyPress(hwnd, amplitude);
+        if (amplitude > 0)
+        {
+            _shake!.OnKeyPress(hwnd, amplitude);
+        }
     }
 
     private void OnSelectionStarted(System.Drawing.Point startPoint)

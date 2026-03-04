@@ -9,7 +9,9 @@ public enum KeyEventType
     Backspace,
     Delete,
     Enter,
-    CtrlA
+    Tab,
+    CtrlA,
+    Arrow // 方向键或括号跳转
 }
 
 /// <summary>

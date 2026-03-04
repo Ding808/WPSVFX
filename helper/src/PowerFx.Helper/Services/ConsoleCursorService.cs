@@ -108,14 +108,25 @@ public sealed class ConsoleCursorService : IDisposable
         }
 
         // 5. 换算（全部物理像素）
-        // col * cellW 是光标列左边缘；+ cellW/2 取列中心
-        // visibleRow * cellH 是行顶部；+ cellH 取行底部（光标线/块实际位于行底）
-        int screenX = (int)(clientOrigin.X + paddingPx + col * realCellW + realCellW / 2);
-        int screenY = (int)(clientOrigin.Y + tabBarPx  + visibleRow * realCellH + realCellH);
+        // col * realCellW 是光标所在列左边缘；为了让方块对齐，我们将这个坐标视为起点。
+        // visibleRow * realCellH 是行顶部；由于有 padding，需要加上。
+        // 这里计算出的是字符槽左上角的精确坐标，之后再向右下角施加中心偏移量，避免方块超出或者错位
+        double screenX = clientOrigin.X + paddingPx + col * realCellW;
+        double screenY = clientOrigin.Y + tabBarPx  + visibleRow * realCellH;
+
+        // 这里再针对光标本身通常会有稍微向下偏移做一点手工微调
+        // 使生成的框体或粒子，其渲染坐标中心在文字的中点
+        screenX += realCellW / 2.0;
+        screenY += realCellH / 2.0;
+
+        // 微调：由于控制台字体通常有稍微向下的 baseline 偏移，这里 y 轴上拉高或下沉微调
+        // 下沉 2 像素刚好匹配文字真正的中央
+        screenY += 2;
+        screenX += 2; 
 
         Logger.Debug("ConsoleCursor",
             $"dpiScale={dpiScale:F2} col={col}/{viewportCols} visRow={visibleRow}/{viewportRows} cell={realCellW:F1}x{realCellH:F1} tabBarPx={tabBarPx} clientOrigin=({clientOrigin.X},{clientOrigin.Y}) \u2192 screen=({screenX},{screenY})");
-        return new Point(screenX, screenY);
+        return new Point((int)screenX, (int)screenY);
     }
 
     // ── 进程树搜索 ────────────────────────────────────────────────────────────
