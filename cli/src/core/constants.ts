@@ -22,12 +22,11 @@ export const PID_FILE_PATH = path.join(USER_DATA_DIR, 'helper.pid');
 /** 备份 settings.json 的目录 */
 export const BACKUP_DIR = path.join(USER_DATA_DIR, 'backups');
 
-/** Helper exe 相对于本包的路径（发布后）*/
-export const HELPER_EXE_RELATIVE = path.join('..', '..', 'helper', 'bin', HELPER_EXE_NAME);
-
-/** Helper exe 绝对路径（根据 __dirname 计算）*/
+/** Helper exe 绝对路径（根据 __dirname 计算）
+ *  安装后布局：<pkg>/dist/core/ → <pkg>/vendor/bin/
+ */
 export function resolveHelperExePath(): string {
-  return path.resolve(__dirname, '..', '..', '..', 'helper', 'bin', HELPER_EXE_NAME);
+  return path.resolve(__dirname, '..', '..', 'vendor', 'bin', HELPER_EXE_NAME);
 }
 
 /** Windows Terminal settings.json 可能存在的路径（优先级从高到低）*/

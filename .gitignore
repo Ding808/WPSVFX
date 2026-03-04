@@ -1,6 +1,7 @@
 # ── Node / TypeScript ────────────────────────────────────────
 node_modules/
 cli/dist/
+cli/vendor/
 *.tsbuildinfo
 
 # ── .NET / C# ────────────────────────────────────────────────

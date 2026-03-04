@@ -27,7 +27,7 @@ export function installAssets(force = false): void {
 
   // 安装音频文件
   fs.mkdirSync(AUDIO_INSTALL_DIR, { recursive: true });
-  const audioFiles = ['key.wav', 'backspace.wav', 'delete.wav', 'select.wav'];
+  const audioFiles = ['whoosh.mp3', 'CinematicBoom.mp3', 'Lightning.mp3', 'click.mp3'];
 
   for (const audioFile of audioFiles) {
     const src = path.join(pkgAssetsDir, 'audio', audioFile);
@@ -52,10 +52,10 @@ export function installAssets(force = false): void {
 export function removeInstalledAssets(): void {
   const targets = [
     SHADER_INSTALL_PATH,
-    path.join(AUDIO_INSTALL_DIR, 'key.wav'),
-    path.join(AUDIO_INSTALL_DIR, 'backspace.wav'),
-    path.join(AUDIO_INSTALL_DIR, 'delete.wav'),
-    path.join(AUDIO_INSTALL_DIR, 'select.wav')
+    path.join(AUDIO_INSTALL_DIR, 'whoosh.mp3'),
+    path.join(AUDIO_INSTALL_DIR, 'CinematicBoom.mp3'),
+    path.join(AUDIO_INSTALL_DIR, 'Lightning.mp3'),
+    path.join(AUDIO_INSTALL_DIR, 'click.mp3')
   ];
 
   for (const t of targets) {
@@ -70,8 +70,9 @@ export function removeInstalledAssets(): void {
   }
 }
 
-/** 定位包内 assets 目录（相对于编译后的 dist/core） */
+/** 定位包内 assets 目录（相对于编译后的 dist/core）
+ *  安装后布局：<pkg>/dist/core/ → <pkg>/vendor/assets/
+ */
 function resolvePackageAssetsDir(): string {
-  // dist/core/ → ../../assets/
-  return path.resolve(__dirname, '..', '..', '..', 'assets');
+  return path.resolve(__dirname, '..', '..', 'vendor', 'assets');
 }

@@ -16,19 +16,51 @@ public sealed class SoundService : IDisposable
 
     private readonly Dictionary<string, CachedSound> _sounds = new();
     private readonly ConcurrentDictionary<string, long> _lastPlayTick = new();
+    private WaveOutEvent? _outputDevice;
+    private MixingSampleProvider? _mixer;
+    private WaveFormat? _targetFormat;
     private bool _disposed;
 
-    private static readonly string AudioDir =
+    // 优先从环境变量配置的目录或开发者目录载入，后备到本地 AppData
+    private static readonly string AppDataAudioDir =
         System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "wt-powerfx", "audio");
 
+    private static string GetAudioPath(string filename)
+    {
+        // Debug/本地 环境下自动寻路到项目里的 assets/audio，方便测试
+        string dir = AppDomain.CurrentDomain.BaseDirectory;
+        for (int i = 0; i < 5; i++)
+        {
+            string testPath = System.IO.Path.Combine(dir, "assets", "audio", filename);
+            if (System.IO.File.Exists(testPath)) return testPath;
+            dir = System.IO.Path.Combine(dir, "..");
+        }
+
+        return System.IO.Path.Combine(AppDataAudioDir, filename);
+    }
+
     public void LoadSounds()
     {
-        LoadSound("key",       System.IO.Path.Combine(AudioDir, "key.wav"));
-        LoadSound("backspace", System.IO.Path.Combine(AudioDir, "backspace.wav"));
-        LoadSound("delete",    System.IO.Path.Combine(AudioDir, "delete.wav"));
-        LoadSound("select",    System.IO.Path.Combine(AudioDir, "select.wav"));
+        try
+        {
+            // 初始化全局音频混合器与输出设备，极大降低延迟和CPU占用
+            _targetFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
+            _mixer = new MixingSampleProvider(_targetFormat) { ReadFully = true };
+            _outputDevice = new WaveOutEvent { DesiredLatency = 100 }; // 降低延迟，提高响应速度
+            _outputDevice.Init(_mixer);
+            _outputDevice.Play(); // 保持常驻播放状态（输出静音直到有音频混入）
+
+            LoadSound("input",     GetAudioPath("whoosh.mp3"));
+            LoadSound("delete",    GetAudioPath("CinematicBoom.mp3"));
+            LoadSound("enter",     GetAudioPath("Lightning.mp3"));
+            LoadSound("select",    GetAudioPath("click.mp3"));
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn("SoundService", $"初始化全局音频设备失败: {ex.Message}");
+        }
     }
 
     private void LoadSound(string key, string path)
@@ -38,10 +70,12 @@ public sealed class SoundService : IDisposable
             Logger.Warn("SoundService", $"音频文件未找到，跳过: {path}");
             return;
         }
+        if (_targetFormat == null) return;
+
         try
         {
-            _sounds[key] = new CachedSound(path);
-            Logger.Info("SoundService", $"已加载音效: {key} ← {path}");
+            _sounds[key] = new CachedSound(path, _targetFormat);
+            Logger.Info("SoundService", $"已加载音效并重采样: {key} ← {path}");
         }
         catch (Exception ex)
         {
@@ -53,19 +87,27 @@ public sealed class SoundService : IDisposable
     {
         var soundKey = evt.EventType switch
         {
-            KeyEventType.Backspace => "backspace",
+            KeyEventType.Backspace => "delete",
             KeyEventType.Delete    => "delete",
-            KeyEventType.Enter     => "key",
+            KeyEventType.Enter     => "enter",
+            KeyEventType.Tab       => "enter",
             KeyEventType.CtrlA     => "select",
-            _                      => "key"
+            KeyEventType.Arrow     => null, // 方向键无需音效，保持安静
+            _                      => "input"
         };
-        PlayThrottled(soundKey);
+        
+        if (soundKey != null)
+        {
+            PlayThrottled(soundKey);
+        }
     }
 
     public void PlaySelect() => PlayThrottled("select");
 
     private void PlayThrottled(string key)
     {
+        if (_mixer == null) return;
+
         long now = Environment.TickCount64;
         long last = _lastPlayTick.GetOrAdd(key, 0L);
         if (now - last < ThrottleMs) return;
@@ -76,15 +118,9 @@ public sealed class SoundService : IDisposable
 
         try
         {
-            // 每次新建 provider（CachedSound 是只读字节缓冲，可安全复用）
+            // 对于并发低延迟播放，只需将提供者混入处于一直运行状态的_mixer之中即可
             var provider = new CachedSoundSampleProvider(sound);
-            var mixer    = new MixingSampleProvider(provider.WaveFormat) { ReadFully = false };
-            mixer.AddMixerInput(provider);
-
-            var output = new WaveOutEvent();
-            output.Init(mixer);
-            output.PlaybackStopped += (_, _) => output.Dispose();
-            output.Play();
+            _mixer.AddMixerInput(provider);
         }
         catch (Exception ex)
         {
@@ -96,6 +132,18 @@ public sealed class SoundService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        if (_outputDevice != null)
+        {
+            try
+            {
+                _outputDevice.Stop();
+                _outputDevice.Dispose();
+            }
+            catch { }
+            _outputDevice = null;
+        }
+
         foreach (var s in _sounds.Values) s.Dispose();
         _sounds.Clear();
     }
@@ -110,6 +158,27 @@ internal sealed class CachedSound : IDisposable
 {
     public float[] AudioData { get; }
     public WaveFormat WaveFormat { get; }
+
+    public CachedSound(string path, WaveFormat targetFormat)
+    {
+        using var reader = new AudioFileReader(path);
+        
+        ISampleProvider provider = reader;
+        
+        // 如果文件本身的采样率/声道数与全局混合器不一样，则在这里重采样
+        if (reader.WaveFormat.SampleRate != targetFormat.SampleRate || reader.WaveFormat.Channels != targetFormat.Channels)
+        {
+            provider = new MediaFoundationResampler(reader, targetFormat).ToSampleProvider();
+        }
+
+        WaveFormat = targetFormat;
+        var buf   = new List<float>();
+        var block = new float[WaveFormat.SampleRate * WaveFormat.Channels]; // 读取时使用新的格式缓冲区
+        int read;
+        while ((read = provider.Read(block, 0, block.Length)) > 0)
+            buf.AddRange(block.Take(read));
+        AudioData = buf.ToArray();
+    }
 
     public CachedSound(string path)
     {
