@@ -153,17 +153,18 @@ uninstall flags:
 
 ##  Audio Files
 
-Sound files are **not bundled** (licensing). Place your own WAV files here  
-after install: `%APPDATA%\wt-powerfx\audio\`
+Sound files are **bundled** — no extra downloads needed. They are automatically
+installed to `%APPDATA%\wt-powerfx\audio\` when you run `wt-powerfx install`.
 
 | Filename | Trigger |
 |----------|---------|
-| `key.wav` | Any regular keypress |
-| `backspace.wav` | Backspace key |
-| `delete.wav` | Delete key |
-| `select.wav` | Text selection / Ctrl+A |
+| `whoosh.mp3` | Any regular keypress |
+| `CinematicBoom.mp3` | Backspace / Delete |
+| `Lightning.mp3` | Enter |
+| `click.mp3` | Text selection / Ctrl+A |
 
-Free CC0 sounds: [Kenney.nl Interface Sounds](https://kenney.nl/assets/interface-sounds)
+You can replace any file with your own audio — just drop a same-named MP3 into  
+`%APPDATA%\wt-powerfx\audio\` and restart the helper.
 
 ---
 
@@ -358,17 +359,17 @@ uninstall 选项：
 
 ##  音效文件
 
-音效文件因版权原因**未随包发布**。请将 WAV 文件放至安装后的目录：  
-`%APPDATA%\wt-powerfx\audio\`
+音效文件已**随包内置**，无需另行下载。执行 `wt-powerfx install` 时会自动安装至  
+`%APPDATA%\wt-powerfx\audio\`。
 
 | 文件名 | 触发时机 |
-|--------|---------|
-| `key.wav` | 普通按键 |
-| `backspace.wav` | Backspace 键 |
-| `delete.wav` | Delete 键 |
-| `select.wav` | 文字选区 / Ctrl+A |
+|--------|----------|
+| `whoosh.mp3` | 普通按键 |
+| `CinematicBoom.mp3` | Backspace / Delete |
+| `Lightning.mp3` | Enter |
+| `click.mp3` | 文字选区 / Ctrl+A |
 
-推荐免版权音效：[Kenney.nl Interface Sounds](https://kenney.nl/assets/interface-sounds)（CC0）
+如需替换为自定义音效，将同名 MP3 放入 `%APPDATA%\wt-powerfx\audio\` 并重启 helper 即可。
 
 ---
 
