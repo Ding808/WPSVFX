@@ -35,48 +35,69 @@ https://github.com/user-attachments/assets/abc8cb99-2128-4d55-93ec-01ffb0e57768
 
 ##  Installation
 
-### Step 1  Check prerequisites
+### Prerequisites
 
 | Requirement | How to get it |
 |-------------|--------------|
-| **Windows 10 1903+ / Windows 11** |  |
-| **Windows Terminal** | [Microsoft Store](https://aka.ms/terminal)  [GitHub Releases](https://github.com/microsoft/terminal/releases)  `winget install Microsoft.WindowsTerminal` |
-| **Node.js  18** | [nodejs.org](https://nodejs.org)  `winget install OpenJS.NodeJS` |
+| **Windows 10 1903+ / Windows 11** | — |
+| **Windows Terminal** | [Microsoft Store](https://aka.ms/terminal) · [GitHub Releases](https://github.com/microsoft/terminal/releases) · `winget install Microsoft.WindowsTerminal` |
+| **Node.js ≥ 18** *(Method 1 only)* | [nodejs.org](https://nodejs.org) · `winget install OpenJS.NodeJS` |
 
-> The .NET 8 runtime is **already bundled** inside the package  you do not need to install it separately.
+> The .NET 8 runtime is **already bundled** — no separate install needed.
 
-Verify Node.js is installed by opening any terminal and running:
+---
+
+### ✅ Method 1 — Install via npm *(recommended)*
+
+**Step 1** — Verify Node.js is installed:
 ```powershell
 node --version   # should print v18.x.x or higher
 npm --version
 ```
 
-### Step 2  Install the package
-
-Open **PowerShell** or **Windows Terminal** and run:
-
+**Step 2** — Install the package globally:
 ```powershell
 npm install -g wt-powerfx
 ```
 
-### Step 3  Run the installer
-
+**Step 3** — Run the installer:
 ```powershell
 wt-powerfx install
 ```
 
-This single command will:
-1. Detect your Windows Terminal installation
-2. Back up your existing `settings.json`
-3. Copy the shader and audio assets to `%APPDATA%\wt-powerfx\`
-4. Patch `settings.json` to enable the CRT shader
-5. Start the helper process in the background
-
-### Step 4  Restart Windows Terminal
-
-Close **all** Windows Terminal windows and reopen it. The CRT shader activates on startup.
+**Step 4** — Restart Windows Terminal (close all windows and reopen).
 
 > **Toggle the shader at any time** with **Ctrl + Alt + P**
+
+---
+
+### 📦 Method 2 — Install directly from GitHub *(no Node.js required)*
+
+**Step 1** — Download the latest release from GitHub:
+
+👉 [github.com/Ding808/WPSVFX/releases/latest](https://github.com/Ding808/WPSVFX/releases/latest)
+
+Download and extract `wt-powerfx-win-x64.zip`.
+
+**Step 2** — Open PowerShell in the extracted folder and run:
+```powershell
+.\install.ps1
+```
+
+> If you see a security warning, run: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+**Step 3** — Restart Windows Terminal.
+
+---
+
+### What the installer does
+
+Whichever method you use, `wt-powerfx install` will:
+1. Detect your Windows Terminal installation
+2. Back up your existing `settings.json`
+3. Copy shader + audio assets to `%APPDATA%\wt-powerfx\`
+4. Patch `settings.json` to enable the CRT shader
+5. Start the helper process in the background
 
 ---
 
@@ -177,8 +198,8 @@ You can replace any file with your own audio — just drop a same-named MP3 into
 
 ```powershell
 # 1. Clone the repo
-git clone https://github.com/your-org/wt-powerfx
-cd wt-powerfx
+git clone https://github.com/Ding808/WPSVFX.git
+cd WPSVFX
 
 # 2. Build the C# helper (~100 MB self-contained exe)
 .\scripts\build-helper.ps1
@@ -382,8 +403,8 @@ uninstall 选项：
 
 ```powershell
 # 1. 克隆仓库
-git clone https://github.com/your-org/wt-powerfx
-cd wt-powerfx
+git clone https://github.com/Ding808/WPSVFX.git
+cd WPSVFX
 
 # 2. 编译 C# helper（~100 MB 自包含单文件）
 .\scripts\build-helper.ps1
