@@ -256,11 +256,19 @@ public sealed class ConsoleCursorService : IDisposable
             {
                 IntPtr hOut = Win32.GetStdHandle(Win32.STD_OUTPUT_HANDLE);
                 if (hOut == IntPtr.Zero || hOut == Win32.INVALID_HANDLE_VALUE)
+                {
+                    Logger.Warn("ConsoleCursorService",
+                        $"GetStdHandle 返回无效句柄 hOut={hOut} 错误码={Marshal.GetLastWin32Error()}");
                     return false;
+                }
 
                 // 光标行列（绝对缓冲坐标）
                 if (!Win32.GetConsoleScreenBufferInfo(hOut, out var bufInfo))
+                {
+                    Logger.Warn("ConsoleCursorService",
+                        $"GetConsoleScreenBufferInfo 失败，错误码={Marshal.GetLastWin32Error()}");
                     return false;
+                }
 
                 col          = bufInfo.dwCursorPosition.X;
                 // 视口相对行（消除滚动偏移）

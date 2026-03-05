@@ -1,6 +1,6 @@
 {
   "name": "wt-powerfx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Enhanced effects for Windows Terminal – keystroke sounds, particle overlay, window shake",
   "keywords": ["windows-terminal", "powerfx", "shader", "particle", "effect"],
   "author": "wt-powerfx contributors",
