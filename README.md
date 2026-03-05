@@ -40,40 +40,35 @@ https://github.com/user-attachments/assets/abc8cb99-2128-4d55-93ec-01ffb0e57768
 |-------------|--------------|
 | **Windows 10 1903+ / Windows 11** | — |
 | **Windows Terminal** | [Microsoft Store](https://aka.ms/terminal) · [GitHub Releases](https://github.com/microsoft/terminal/releases) · `winget install Microsoft.WindowsTerminal` |
-
-> The .NET 8 runtime is **already bundled** — no separate install needed.
+| **[.NET 8 SDK](https://dotnet.microsoft.com/download)** | Required to build the helper |
 
 ---
 
 ### 📦 Install from GitHub
 
-**Step 1** — Download the latest release:
-
-👉 [github.com/Ding808/WPSVFX/releases/latest](https://github.com/Ding808/WPSVFX/releases/latest)
-
-Download and extract `wt-powerfx-win-x64.zip`.
-
-**Step 2** — Open PowerShell in the extracted folder and run:
+**Step 1** — Clone the repository:
 ```powershell
-.\install.ps1
+git clone https://github.com/Ding808/WPSVFX.git
+cd WPSVFX
 ```
 
-> If you see a security warning, run: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+**Step 2** — Build the helper executable:
+```powershell
+.\scripts\build-helper.ps1
+```
 
-**Step 3** — Restart Windows Terminal (close all windows and reopen).
+This compiles the C# helper and outputs `helper\bin\PowerFx.Helper.exe`.
+
+> If you see an execution policy warning, run: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+**Step 3** — Start the helper process:
+```powershell
+.\helper\bin\PowerFx.Helper.exe
+```
+
+**Step 4** — Restart Windows Terminal (close all windows and reopen).
 
 > **Toggle the shader at any time** with **Ctrl + Alt + P**
-
----
-
-### What the installer does
-
-`install.ps1` will automatically:
-1. Detect your Windows Terminal installation
-2. Back up your existing `settings.json`
-3. Copy shader + audio assets to `%APPDATA%\wt-powerfx\`
-4. Patch `settings.json` to enable the CRT shader
-5. Start the helper process in the background
 
 ---
 
@@ -93,14 +88,12 @@ You can replace any file with your own audio — just drop a same-named MP3 into
 
 ---
 
-##  Uninstall
+##  Stop the Helper
 
-Run in the extracted folder:
+Close the `PowerFx.Helper.exe` window or kill the process:
 ```powershell
-.\uninstall.ps1
+Stop-Process -Name PowerFx.Helper
 ```
-
-This stops the helper, restores your original `settings.json`, and removes installed assets.
 
 ---
 
@@ -149,41 +142,35 @@ MIT — wt-powerfx contributors
 |----------|---------|
 | **Windows 10 1903+ / Windows 11** | — |
 | **Windows Terminal** | [Microsoft Store](https://aka.ms/terminal) · [GitHub Releases](https://github.com/microsoft/terminal/releases) · `winget install Microsoft.WindowsTerminal` |
-
-> .NET 8 运行时已**内嵌**于压缩包中，**无需单独安装**。
+| **[.NET 8 SDK](https://dotnet.microsoft.com/download)** | 编译 helper 所需 |
 
 ---
 
-### 📦 从 GitHub 下载安装
+### 📦 从 GitHub 克隆安装
 
-**第一步** — 下载最新发行版：
-
-👉 [github.com/Ding808/WPSVFX/releases/latest](https://github.com/Ding808/WPSVFX/releases/latest)
-
-下载并解压 `wt-powerfx-win-x64.zip`。
-
-**第二步** — 在解压目录中打开 **PowerShell**，执行：
-
+**第一步** — 克隆仓库：
 ```powershell
-.\install.ps1
+git clone https://github.com/Ding808/WPSVFX.git
+cd WPSVFX
 ```
 
-> 若出现安全警告，请先执行：`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+**第二步** — 编译 helper 可执行文件：
+```powershell
+.\scripts\build-helper.ps1
+```
 
-**第三步** — 重启 Windows Terminal（关闭所有窗口后重新打开）。
+编译完成后，可执行文件位于 `helper\bin\PowerFx.Helper.exe`。
+
+> 若出现执行策略警告，请先执行：`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+**第三步** — 启动 helper 进程：
+```powershell
+.\helper\bin\PowerFx.Helper.exe
+```
+
+**第四步** — 重启 Windows Terminal（关闭所有窗口后重新打开）。
 
 > **随时按 Ctrl + Alt + P 切换 shader 开关**
-
----
-
-### 安装程序自动完成的步骤
-
-`install.ps1` 将自动执行：
-1. 检测 Windows Terminal 的安装路径
-2. 备份现有的 `settings.json`
-3. 将 shader 和音频资源复制到 `%APPDATA%\wt-powerfx\`
-4. 修改 `settings.json` 以启用 CRT shader
-5. 在后台启动 helper 进程
 
 ---
 
@@ -202,14 +189,12 @@ MIT — wt-powerfx contributors
 
 ---
 
-##  卸载
+##  停止 Helper
 
-在解压目录中执行：
+关闭 `PowerFx.Helper.exe` 窗口，或在 PowerShell 中执行：
 ```powershell
-.\uninstall.ps1
+Stop-Process -Name PowerFx.Helper
 ```
-
-将停止 helper 进程、还原 `settings.json`、删除已安装资源。
 
 ---
 
